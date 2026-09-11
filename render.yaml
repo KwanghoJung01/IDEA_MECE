@@ -1,0 +1,36 @@
+# ──────────────────────────────────────────────────────────────────────
+#  Render 배포 청사진 (Blueprint)
+#
+#  사용법
+#    1. Render 로그인 → New + → Blueprint
+#    2. 이 리포지토리를 선택하면 아래 설정이 자동으로 적용됩니다.
+#    3. SECRET_KEY 는 Render 가 자동 생성하므로 따로 입력할 필요가 없습니다.
+#
+#  ※ Gemini API 키는 여기에 넣지 않습니다.
+#    키는 배포 후 화면의 [설정] 모달에서 사용자가 직접 입력하며,
+#    서버에는 저장되지 않고 각자의 브라우저 세션에만 격리 보관됩니다.
+#
+#  ※ 이 청사진이 인식되지 않는 경우 README 의 수동 설정 절차를 따르면
+#    동일하게 배포됩니다(Build/Start 명령만 직접 입력).
+# ──────────────────────────────────────────────────────────────────────
+services:
+  - type: web
+    name: idea-mece
+    runtime: python
+    plan: free
+    region: singapore          # 한국에서 가장 가까운 리전
+    branch: main
+    buildCommand: pip install -r requirements.txt
+    # 워커 1개 + 스레드 8개 — API 키를 프로세스 메모리에 격리 보관하는
+    # 설계이므로 워커를 늘리면 세션과 키가 워커별로 분리되어 오동작합니다.
+    startCommand: gunicorn --workers 1 --threads 8 --timeout 300 --access-logfile - wsgi:app
+    healthCheckPath: /healthz
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11.9"
+      - key: SECRET_KEY
+        generateValue: true    # Render 가 안전한 난수를 자동 생성
+      - key: FLASK_ENV
+        value: production
+      - key: SESSION_COOKIE_SECURE
+        value: "1"

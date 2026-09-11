@@ -25,6 +25,7 @@ INCLUDE_FILES = (
     "requirements.txt",
     "Procfile",
     "runtime.txt",
+    "render.yaml",
     "README.md",
     ".env.example",
     ".gitignore",
