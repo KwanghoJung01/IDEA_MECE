@@ -607,8 +607,9 @@
   }
 
   function collapseAll() {
+    // 최상위 항목까지 모두 접어야 실제로 화면이 접힌다.
     state.nodes.forEach(function (node, id) {
-      if (node.child_count > 0 && node.depth > 0) { collapseNode(id); }
+      if (node.child_count > 0) { collapseNode(id); }
     });
   }
 

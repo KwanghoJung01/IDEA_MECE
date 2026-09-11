@@ -2561,8 +2561,10 @@ var App = (function () {
   }
 
   function collapseAll() {
+    // 최상위 항목까지 모두 접어야 실제로 화면이 접힌다.
+    // (depth 0 을 건너뛰면 최상위의 자식이 그대로 보여 '반응 없음'처럼 보인다)
     Tree.state.nodes.forEach(function (node) {
-      if (node.child_count > 0 && node.depth > 0) { collapseNode(node.id); }
+      if (node.child_count > 0) { collapseNode(node.id); }
     });
   }
 
