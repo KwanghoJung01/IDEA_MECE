@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light">
+  <meta name="description" content="주제를 입력하면 중복과 누락 없이 하위 아이디어를 단계적으로 확장하고, 실무용 보고서를 만들어 주는 기업용 아이디어 도출 솔루션">
+  <meta name="robots" content="noindex, nofollow">
+  <title>{% block title %}IDEA MECE · 비즈니스 아이디어 도출 솔루션{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%2312233F'/><path d='M16 7v18M9 13h14M11 19h10' stroke='%23C9A227' stroke-width='2' stroke-linecap='round'/></svg>">
+</head>
+<body>
+  {% block body %}{% endblock %}
+  <script type="application/json" id="app-bootstrap">{{ bootstrap | tojson }}</script>
+  <script src="{{ url_for('static', filename='js/app.js') }}" defer></script>
+</body>
+</html>

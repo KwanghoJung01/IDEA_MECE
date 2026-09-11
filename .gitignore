@@ -1,0 +1,33 @@
+# 환경 변수 / 비밀정보
+.env
+.env.*
+!.env.example
+
+# 런타임 산출물
+downloads/*
+!downloads/.gitkeep
+instance/
+*.db
+*.sqlite3
+*.sqlite3-journal
+*.sqlite3-wal
+*.sqlite3-shm
+
+# 파이썬
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+
+# 에디터 / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# 로그
+*.log
