@@ -215,6 +215,8 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .field-count { max-width: 140px; }
 .btn-generate { min-height: 48px; }
 
+.email-input { min-height: 62px; line-height: 1.55; }
+
 .hint {
   margin-top: 14px; padding: 11px 14px;
   background: var(--info-soft); border: 1px solid var(--navy-100);

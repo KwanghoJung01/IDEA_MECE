@@ -43,12 +43,14 @@ __all__ = [
     "sanitize_text",
     "validate_count",
     "validate_email",
+    "validate_emails",
     "validate_model",
     "vault",
 ]
 
 _CONTROL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 _EMAIL_RE = re.compile(r"^[A-Za-z0-9._%+\-]{1,64}@[A-Za-z0-9.\-]{1,190}\.[A-Za-z]{2,24}$")
+_EMAIL_FIND_RE = re.compile(r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,24}")
 # Gemini API 키 형식(영문/숫자/-/_ 조합). 공백·따옴표·제어문자 차단으로 헤더 인젝션 방지.
 _API_KEY_RE = re.compile(r"^[A-Za-z0-9_\-]{20,200}$")
 
@@ -220,13 +222,45 @@ def validate_api_key(value: Any) -> str:
     return key
 
 
-def validate_email(value: Any) -> str:
-    email = str(value or "").strip()
-    if not email:
+MAX_RECIPIENTS = 30
+
+
+def validate_emails(value: Any) -> str:
+    """
+    자유 입력에서 이메일 주소만 뽑아 쉼표로 정규화한다.
+    "hong@a.com, kim@b.com" 은 물론 "홍길동 <hong@a.com>" 처럼
+    메일 프로그램에서 복사한 형태도 그대로 받아들인다.
+    """
+    text = str(value or "").strip()
+    if not text:
         return ""
-    if len(email) > 254 or not _EMAIL_RE.match(email):
-        raise ValueError("이메일 형식이 올바르지 않습니다.")
-    return email
+
+    found = _EMAIL_FIND_RE.findall(text)
+    emails: list[str] = []
+    seen: set[str] = set()
+    for email in found:
+        if len(email) > 254 or not _EMAIL_RE.match(email):
+            continue
+        key = email.lower()
+        if key in seen:          # 중복 수신자 제거
+            continue
+        seen.add(key)
+        emails.append(email)
+
+    # 인식된 주소를 걷어낸 뒤에도 '@' 가 남으면 형식이 잘못된 항목이 있다는 뜻
+    rest = text
+    for email in found:
+        rest = rest.replace(email, " ")
+    if "@" in rest:
+        raise ValueError("형식이 올바르지 않은 이메일이 있습니다. 쉼표로 구분해 다시 확인해 주세요.")
+    if len(emails) > MAX_RECIPIENTS:
+        raise ValueError(f"수신자는 최대 {MAX_RECIPIENTS}명까지 등록할 수 있습니다.")
+    return ", ".join(emails)
+
+
+def validate_email(value: Any) -> str:
+    """단일 주소 검증(하위 호환). 내부적으로 다중 검증을 사용한다."""
+    return validate_emails(value)
 
 
 def mask_key(key: str) -> str:

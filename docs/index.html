@@ -241,6 +241,8 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .field-count { max-width: 140px; }
 .btn-generate { min-height: 48px; }
 
+.email-input { min-height: 62px; line-height: 1.55; }
+
 .field-check { gap: 0; }
 .check-line {
   display: flex; align-items: center; gap: 9px;
@@ -620,10 +622,11 @@ button, input, select, textarea { font: inherit; color: inherit; }
         <p class="field-hint">무료 사용 가능한 모델 목록입니다. 속도가 중요하면 Lite 모델을 선택하세요.</p>
       </div>
       <div class="field">
-        <label for="email-input">이메일 (등록용)</label>
-        <input type="email" id="email-input" name="email" placeholder="name@company.com"
-               maxlength="254" autocomplete="off" spellcheck="false">
-        <p class="field-hint">메일 작성 시 기본 수신자로 사용됩니다. 자동 발송은 하지 않습니다.</p>
+        <label for="email-input">수신자 이메일 (여러 명 가능)</label>
+        <textarea id="email-input" name="email" class="email-input" rows="2"
+                  placeholder="hong@company.com, kim@company.com&#10;홍길동 &lt;hong@company.com&gt; 형태로 붙여넣어도 됩니다"
+                  maxlength="2000" autocomplete="off" spellcheck="false" inputmode="email"></textarea>
+        <p class="field-hint" id="email-hint">쉼표·세미콜론·줄바꿈으로 구분해 여러 명을 넣을 수 있습니다. 메일 작성 시 모두 수신자로 들어가며, 자동 발송은 하지 않습니다.</p>
       </div>
       <div class="modal-actions">
         <button type="button" class="btn btn-danger-ghost btn-sm" id="btn-clear-key">키 삭제</button>
@@ -2654,7 +2657,10 @@ var App = (function () {
 
   function updateMailLink() {
     if (!ui.mail) { return; }
-    el.btnMail.setAttribute('href', 'mailto:' + encodeURIComponent(ui.settings.email || '')
+    // mailto 는 수신자를 쉼표로 구분한다. 주소 하나하나만 인코딩하고
+    // 구분자 쉼표는 그대로 두어야 메일 프로그램이 여러 명으로 인식한다.
+    var to = parseEmails(ui.settings.email).list.map(encodeURIComponent).join(',');
+    el.btnMail.setAttribute('href', 'mailto:' + to
       + '?subject=' + encodeURIComponent(ui.mail.subject)
       + '&body=' + encodeURIComponent(ui.mail.body));
   }
@@ -2713,7 +2719,10 @@ var App = (function () {
     // 4) 입력값·링크 초기화 (키가 섞여 나가지 않도록)
     ['#topic-input', '#api-key-input', '#email-input'].forEach(function (selector) {
       var node = pick(selector);
-      if (node) { node.setAttribute('value', ''); }
+      if (!node) { return; }
+      // textarea 는 value 속성이 아니라 태그 안의 텍스트가 초기값이 된다
+      if (node.tagName === 'TEXTAREA') { node.textContent = ''; }
+      else { node.setAttribute('value', ''); }
     });
     var keyInput = pick('#api-key-input');
     if (keyInput) { keyInput.setAttribute('placeholder', 'AIza...'); }
@@ -2744,7 +2753,35 @@ var App = (function () {
     el.apiKeyHint.textContent = ui.apiKey
       ? '키가 등록되어 있습니다. 변경할 때만 새로 입력하세요.'
       : '키는 이 브라우저 안에만 저장되며, 구글 외의 어떤 서버로도 전송되지 않습니다.';
+    if (el.emailHint) {
+      var recipients = parseEmails(ui.settings.email).list;
+      el.emailHint.textContent = recipients.length
+        ? '수신자 ' + recipients.length + '명이 등록되어 있습니다. 메일 작성 시 모두 포함됩니다.'
+        : '쉼표·세미콜론·줄바꿈으로 구분해 여러 명을 넣을 수 있습니다. 자동 발송은 하지 않습니다.';
+    }
     updateMailLink();
+  }
+
+  var EMAIL_RE = /^[A-Za-z0-9._%+\-]{1,64}@[A-Za-z0-9.\-]{1,190}\.[A-Za-z]{2,24}$/;
+  var EMAIL_FIND_RE = /[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,24}/g;
+  var MAX_RECIPIENTS = 30;
+
+  /* 자유롭게 입력된 텍스트에서 이메일 주소만 뽑아낸다.
+     "hong@a.com, kim@b.com" 은 물론 "홍길동 <hong@a.com>" 처럼
+     메일 프로그램에서 복사한 형태도 그대로 받아들인다. */
+  function parseEmails(raw) {
+    var text = String(raw || '');
+    var found = text.match(EMAIL_FIND_RE) || [];
+    var list = [], seen = {};
+    found.forEach(function (email) {
+      if (email.length > 254 || !EMAIL_RE.test(email)) { return; }
+      var key = email.toLowerCase();
+      if (!seen[key]) { seen[key] = true; list.push(email); }   // 중복 수신자 제거
+    });
+    // 인식된 주소를 걷어낸 뒤에도 '@' 가 남아 있으면 형식이 잘못된 항목이 있다는 뜻
+    var rest = text;
+    found.forEach(function (email) { rest = rest.split(email).join(' '); });
+    return { list: list, hasInvalid: rest.indexOf('@') !== -1 };
   }
 
   function maskKey(key) {
@@ -2770,11 +2807,18 @@ var App = (function () {
       toast('API 키 형식이 올바르지 않습니다. 공백이나 특수문자가 포함되지 않았는지 확인해 주세요.', 'error');
       return;
     }
-    var email = el.emailInput.value.trim();
-    if (email && !/^[A-Za-z0-9._%+\-]{1,64}@[A-Za-z0-9.\-]{1,190}\.[A-Za-z]{2,24}$/.test(email)) {
-      toast('이메일 형식이 올바르지 않습니다.', 'error');
+    var parsedEmails = parseEmails(el.emailInput.value);
+    if (parsedEmails.hasInvalid) {
+      toast('형식이 올바르지 않은 이메일이 있습니다. 쉼표로 구분해 다시 확인해 주세요.', 'error');
+      el.emailInput.focus();
       return;
     }
+    if (parsedEmails.list.length > MAX_RECIPIENTS) {
+      toast('수신자는 최대 ' + MAX_RECIPIENTS + '명까지 등록할 수 있습니다.', 'error');
+      el.emailInput.focus();
+      return;
+    }
+    var email = parsedEmails.list.join(', ');
     if (!typedKey && !ui.apiKey) {
       toast('Gemini API 키를 입력해 주세요.', 'error');
       el.apiKeyInput.focus();
@@ -2852,7 +2896,8 @@ var App = (function () {
      'modelSelect:model-select', 'emailInput:email-input', 'rememberKey:remember-key',
      'btnOpenSettings:btn-open-settings', 'btnCloseSettings:btn-close-settings',
      'btnCancelSettings:btn-cancel-settings', 'btnClearKey:btn-clear-key',
-     'settingsIndicator:settings-indicator', 'apiKeyHint:api-key-hint', 'overlay:overlay',
+     'settingsIndicator:settings-indicator', 'apiKeyHint:api-key-hint', 'emailHint:email-hint',
+     'overlay:overlay',
      'overlayText:overlay-text', 'overlaySub:overlay-sub', 'toastStack:toast-stack',
      'nodeTemplate:node-template', 'btnSaveFile:btn-save-file'
     ].forEach(function (pair) {
@@ -2897,7 +2942,9 @@ var App = (function () {
       if (event.key === 'Escape' && !el.modal.hidden) { closeSettings(); }
     });
     el.btnMail.addEventListener('click', function () {
-      toast('메일 창이 열립니다. 내려받은 워드 파일을 직접 첨부한 뒤 발송해 주세요.');
+      var count = parseEmails(ui.settings.email).list.length;
+      toast((count ? '수신자 ' + count + '명으로 메일 창이 열립니다. ' : '메일 창이 열립니다. ')
+        + '내려받은 워드 파일을 직접 첨부한 뒤 발송해 주세요.');
     });
 
     // 이전 작업 내용 복원

@@ -571,9 +571,21 @@
       });
   }
 
+  /* 자유 입력에서 이메일만 뽑아낸다(서버 검증과 같은 규칙). */
+  function parseEmails(raw) {
+    var found = String(raw || '').match(/[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,24}/g) || [];
+    var list = [], seen = {};
+    found.forEach(function (email) {
+      var key = email.toLowerCase();
+      if (!seen[key]) { seen[key] = true; list.push(email); }
+    });
+    return list;
+  }
+
   function updateMailLink() {
     if (!state.mail) { return; }
-    var to = encodeURIComponent(state.settings.email || '');
+    // 주소만 각각 인코딩하고 구분자 쉼표는 그대로 두어야 여러 명으로 인식된다
+    var to = parseEmails(state.settings.email).map(encodeURIComponent).join(',');
     var subject = encodeURIComponent(state.mail.subject || '');
     var body = encodeURIComponent(state.mail.body || '');
     el.btnMail.setAttribute('href', 'mailto:' + to + '?subject=' + subject + '&body=' + body);

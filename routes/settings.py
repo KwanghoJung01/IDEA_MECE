@@ -14,7 +14,7 @@ from services.security import (
     ensure_session,
     mask_key,
     validate_api_key,
-    validate_email,
+    validate_emails,
     validate_model,
     vault,
 )
@@ -53,7 +53,7 @@ def save_settings():
 
     try:
         model = validate_model(data.get("model"))
-        email = validate_email(data.get("email"))
+        email = validate_emails(data.get("email"))
         raw_key = str(data.get("api_key") or "").strip()
         if raw_key:
             api_key = validate_api_key(raw_key)

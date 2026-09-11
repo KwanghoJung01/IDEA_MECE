@@ -142,10 +142,11 @@
         <p class="field-hint">무료 사용 가능한 모델 목록입니다. 속도가 중요하면 Lite 모델을 선택하세요.</p>
       </div>
       <div class="field">
-        <label for="email-input">이메일 (등록용)</label>
-        <input type="email" id="email-input" name="email" placeholder="name@company.com"
-               maxlength="254" autocomplete="off" spellcheck="false">
-        <p class="field-hint">메일 작성 시 기본 수신자로 사용됩니다. 자동 발송은 하지 않습니다.</p>
+        <label for="email-input">수신자 이메일 (여러 명 가능)</label>
+        <textarea id="email-input" name="email" class="email-input" rows="2"
+                  placeholder="hong@company.com, kim@company.com"
+                  maxlength="2000" autocomplete="off" spellcheck="false" inputmode="email"></textarea>
+        <p class="field-hint" id="email-hint">쉼표·세미콜론·줄바꿈으로 구분해 여러 명을 넣을 수 있습니다. 자동 발송은 하지 않습니다.</p>
       </div>
       <div class="modal-actions">
         <button type="button" class="btn btn-danger-ghost btn-sm" id="btn-clear-key">키 삭제</button>
