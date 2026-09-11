@@ -2292,10 +2292,9 @@ var Voice = (function () {
   var Engine = window.SpeechRecognition || window.webkitSpeechRecognition || null;
 
   var recognition = null;      // 인식기
-  var stream = null;           // 음량 측정용 마이크 스트림
-  var audioCtx = null;
-  var analyser = null;
   var rafId = 0;
+  var restartTimer = 0;
+  var restarts = 0;
   var active = false;
   var stoppedByUser = false;
   var handlers = {};
@@ -2330,62 +2329,37 @@ var Voice = (function () {
   }
 
   /* ── 음량 시각화 ────────────────────────────────────────────── */
-  function startMeter() {
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      return Promise.resolve(false);
-    }
-    return navigator.mediaDevices.getUserMedia({ audio: true }).then(function (mic) {
-      stream = mic;
-      var Ctx = window.AudioContext || window.webkitAudioContext;
-      if (!Ctx) { return false; }
-      audioCtx = new Ctx();
-      analyser = audioCtx.createAnalyser();
-      analyser.fftSize = 64;
-      analyser.smoothingTimeConstant = 0.75;
-      audioCtx.createMediaStreamSource(mic).connect(analyser);
-      return true;
-    }).catch(function () { return false; });   // 실패해도 인식은 계속된다
-  }
+  /* ※ 예전에는 getUserMedia 로 마이크를 따로 열어 실제 음량을 쟀지만,
+        안드로이드에서는 그 스트림이 음성 인식기의 마이크를 가로채
+        "그래프는 움직이는데 글자는 안 들어오는" 증상이 생긴다.
+        그래서 마이크를 두 번 열지 않고, 인식기가 알려주는 소리/발화
+        신호에 맞춰 막대를 움직인다. */
+  var energy = 0;          // 목표 에너지 (0~1)
+  var shownEnergy = 0;     // 화면에 표시되는 에너지 (부드럽게 따라감)
 
-  function runMeter(bars, hasAudio) {
-    var data = analyser ? new Uint8Array(analyser.frequencyBinCount) : null;
+  function setEnergy(value) { energy = Math.max(0, Math.min(1, value)); }
+
+  function runMeter(bars) {
     var tick = 0;
-
     function frame() {
       if (!active) { return; }
-      if (analyser && data) {
-        analyser.getByteFrequencyData(data);
-        for (var i = 0; i < bars.length; i++) {
-          // 주파수 구간을 막대 수에 맞춰 나눠 담는다
-          var idx = Math.floor(i * data.length / bars.length);
-          var level = data[idx] / 255;
-          bars[i].style.height = Math.max(6, Math.round(6 + level * 38)) + 'px';
-        }
-      } else {
-        // 음량을 못 읽는 환경에서는 잔잔한 대기 애니메이션만 보여준다
-        tick += 0.08;
-        for (var j = 0; j < bars.length; j++) {
-          var wave = Math.sin(tick + j * 0.6) * 0.5 + 0.5;
-          bars[j].style.height = Math.round(6 + wave * 10) + 'px';
-        }
+      tick += 0.16;
+      shownEnergy += (energy - shownEnergy) * 0.18;   // 급변 없이 부드럽게
+      for (var i = 0; i < bars.length; i++) {
+        var wave = Math.sin(tick + i * 0.7) * 0.5 + 0.5;
+        var ripple = Math.sin(tick * 1.7 + i * 1.3) * 0.5 + 0.5;
+        var height = 6 + shownEnergy * (8 + wave * 26 + ripple * 8);
+        bars[i].style.height = Math.round(height) + 'px';
       }
       rafId = window.requestAnimationFrame(frame);
     }
-    void hasAudio;
     rafId = window.requestAnimationFrame(frame);
   }
 
   function stopMeter(bars) {
     if (rafId) { window.cancelAnimationFrame(rafId); rafId = 0; }
-    if (stream) {
-      stream.getTracks().forEach(function (track) { track.stop(); });   // 마이크 해제
-      stream = null;
-    }
-    if (audioCtx) {
-      try { audioCtx.close(); } catch (e) { /* 이미 닫힘 */ }
-      audioCtx = null;
-    }
-    analyser = null;
+    energy = 0;
+    shownEnergy = 0;
     if (bars) { bars.forEach(function (bar) { bar.style.height = '6px'; }); }
   }
 
@@ -2409,9 +2383,16 @@ var Voice = (function () {
 
     recognition = new Engine();
     recognition.lang = 'ko-KR';
-    recognition.continuous = true;
+    // 안드로이드 크롬은 continuous=true 에서 결과를 돌려주지 않는 경우가 있다.
+    // 한 문장씩 인식하고 끝날 때마다 즉시 다시 듣는 방식이 훨씬 안정적이다.
+    recognition.continuous = false;
     recognition.interimResults = true;
     recognition.maxAlternatives = 1;
+
+    recognition.onsoundstart = function () { setEnergy(0.55); };
+    recognition.onspeechstart = function () { setEnergy(1); };
+    recognition.onspeechend = function () { setEnergy(0.2); };
+    recognition.onsoundend = function () { setEnergy(0.08); };
 
     recognition.onresult = function (event) {
       var interim = '';
@@ -2420,6 +2401,8 @@ var Voice = (function () {
         var text = result[0] ? result[0].transcript : '';
         if (result.isFinal) { finalText += text; } else { interim += text; }
       }
+      restarts = 0;                 // 결과가 오고 있으므로 정상 동작 중
+      setEnergy(interim ? 0.9 : 0.45);
       if (handlers.onText) { handlers.onText(finalText, interim); }
     };
 
@@ -2443,9 +2426,23 @@ var Voice = (function () {
     };
 
     recognition.onend = function () {
-      // 안드로이드 크롬은 잠시 조용하면 스스로 멈춘다 → 사용자가 끝내기 전까지 이어 붙인다
+      // 한 문장이 끝날 때마다 호출된다 → 사용자가 끝내기 전까지 계속 이어서 듣는다
       if (active && !stoppedByUser) {
-        try { recognition.start(); return; } catch (e) { /* 재시작 실패 시 종료 */ }
+        restarts++;
+        if (restarts > 60) {          // 결과 없이 계속 겉도는 상황 방지
+          if (handlers.onError) {
+            handlers.onError('음성이 인식되지 않습니다. 마이크 권한과 인터넷 연결을 확인한 뒤 다시 시도해 주세요.');
+          }
+          finish(false);
+          return;
+        }
+        setEnergy(0.12);
+        restartTimer = window.setTimeout(function () {
+          if (!active || stoppedByUser || !recognition) { return; }
+          try { recognition.start(); }
+          catch (e) { /* 이미 시작된 경우 등은 무시 */ }
+        }, 180);
+        return;
       }
       finish(true);
     };
@@ -2463,19 +2460,21 @@ var Voice = (function () {
       return;
     }
 
+    restarts = 0;
     if (handlers.onStart) { handlers.onStart(); }
-    startMeter().then(function (ok) {
-      if (active && handlers.bars) { runMeter(handlers.bars, ok); }
-    });
+    if (handlers.bars) { runMeter(handlers.bars); }
   }
 
   /** 세션 종료. notify=false 면 오류 상황이므로 완료 콜백을 부르지 않는다. */
   function finish(notify) {
     if (!active) { return; }
     active = false;
+    if (restartTimer) { window.clearTimeout(restartTimer); restartTimer = 0; }
     stopMeter(handlers.bars);
     if (recognition) {
       recognition.onresult = recognition.onerror = recognition.onend = null;
+      recognition.onsoundstart = recognition.onsoundend = null;
+      recognition.onspeechstart = recognition.onspeechend = null;
       try { recognition.abort(); } catch (e) { /* 이미 종료됨 */ }
       recognition = null;
     }
