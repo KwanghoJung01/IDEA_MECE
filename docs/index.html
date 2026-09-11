@@ -2299,6 +2299,7 @@ var Voice = (function () {
   var stoppedByUser = false;
   var handlers = {};
   var finalText = '';
+  var lastInterim = '';      // 아직 확정되지 않은 마지막 조각
 
   function supported() { return !!Engine; }
 
@@ -2368,6 +2369,7 @@ var Voice = (function () {
     if (active) { return; }
     handlers = options || {};
     finalText = options.initialText || '';
+    lastInterim = '';
     stoppedByUser = false;
 
     if (!supported()) {
@@ -2401,6 +2403,7 @@ var Voice = (function () {
         var text = result[0] ? result[0].transcript : '';
         if (result.isFinal) { finalText += text; } else { interim += text; }
       }
+      lastInterim = interim;        // 완료를 눌렀을 때 이 조각도 함께 살린다
       restarts = 0;                 // 결과가 오고 있으므로 정상 동작 중
       setEnergy(interim ? 0.9 : 0.45);
       if (handlers.onText) { handlers.onText(finalText, interim); }
@@ -2478,25 +2481,47 @@ var Voice = (function () {
       try { recognition.abort(); } catch (e) { /* 이미 종료됨 */ }
       recognition = null;
     }
-    if (notify !== false && handlers.onStop) { handlers.onStop(finalText); }
+    if (notify !== false && handlers.onStop) { handlers.onStop(finalText + lastInterim); }
   }
 
+  /**
+   * 사용자가 [입력 완료]를 눌렀을 때.
+   * ※ 예전에는 recognition.stop() 을 부르고 onend 가 오기를 기다렸는데,
+   *   문장과 문장 사이(재시작 대기 구간)에는 엔진이 이미 멈춰 있어
+   *   onend 가 오지 않아 아무 반응도 없었다.
+   *   이제는 중지 신호만 보내 두고 곧바로 직접 종료한다.
+   */
   function stop() {
     if (!active) { return; }
     stoppedByUser = true;
+    if (restartTimer) { window.clearTimeout(restartTimer); restartTimer = 0; }
     if (recognition) {
-      try { recognition.stop(); } catch (e) { finish(true); }
-    } else {
-      finish(true);
+      try { recognition.stop(); } catch (e) { /* 이미 멈춰 있으면 무시 */ }
     }
+    finish(true);
   }
 
-  function reset() { finalText = ''; }
+  /** 사용자가 취소했을 때 — 입력란에 아무것도 반영하지 않는다. */
+  function cancel() {
+    if (!active) {
+      finalText = ''; lastInterim = '';
+      return;
+    }
+    stoppedByUser = true;
+    if (restartTimer) { window.clearTimeout(restartTimer); restartTimer = 0; }
+    if (recognition) {
+      try { recognition.abort(); } catch (e) { /* 무시 */ }
+    }
+    finish(false);
+    finalText = ''; lastInterim = '';
+  }
+
+  function reset() { finalText = ''; lastInterim = ''; }
   function isActive() { return active; }
 
   return {
     supported: supported, secureOk: secureOk,
-    start: start, stop: stop, reset: reset, isActive: isActive
+    start: start, stop: stop, cancel: cancel, reset: reset, isActive: isActive
   };
 })();
 
@@ -3322,8 +3347,7 @@ var App = (function () {
       el.btnMic.hidden = false;
       el.btnMic.addEventListener('click', startVoice);
       el.btnVoiceCancel.addEventListener('click', function () {
-        Voice.reset();
-        Voice.stop();
+        Voice.cancel();
         closeVoicePanel();
       });
       el.btnVoiceClear.addEventListener('click', function () {
