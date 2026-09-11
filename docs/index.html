@@ -243,6 +243,65 @@ button, input, select, textarea { font: inherit; color: inherit; }
 
 .email-input { min-height: 62px; line-height: 1.55; }
 
+/* ── 음성 입력 ── */
+.input-with-mic { position: relative; display: flex; }
+.input-with-mic input { padding-right: 52px; }
+.mic-btn {
+  position: absolute; right: 5px; top: 50%; transform: translateY(-50%);
+  width: 40px; height: 40px; display: grid; place-items: center;
+  background: var(--navy-050); color: var(--navy-700);
+  border: 1px solid var(--line); border-radius: 9px; cursor: pointer;
+  transition: background-color .15s ease, color .15s ease, border-color .15s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.mic-btn:hover { background: var(--navy-100); }
+.mic-btn.is-recording {
+  background: var(--danger); color: #fff; border-color: var(--danger);
+  animation: mic-pulse 1.4s ease-in-out infinite;
+}
+@keyframes mic-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(180, 67, 74, .45); }
+  50%      { box-shadow: 0 0 0 7px rgba(180, 67, 74, 0); }
+}
+
+.voice-panel {
+  margin-top: 14px; padding: 15px 16px;
+  background: linear-gradient(180deg, var(--navy-050) 0%, #fff 100%);
+  border: 1px solid var(--navy-100); border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  animation: fade-rise .2s ease both;
+}
+.voice-head { display: flex; align-items: center; gap: 8px; }
+.voice-dot {
+  width: 9px; height: 9px; border-radius: 50%; background: var(--danger); flex: none;
+  animation: mic-pulse 1.4s ease-in-out infinite;
+}
+.voice-status { flex: 1; font-size: 13px; font-weight: 700; color: var(--navy-700); }
+.voice-close { width: 32px; height: 32px; }
+
+/* 음량에 따라 높이가 변하는 막대 — 말하는 모습이 눈에 보이도록 */
+.voice-meter {
+  display: flex; align-items: center; justify-content: center; gap: 3px;
+  height: 46px; margin: 12px 0 10px;
+}
+.voice-meter span {
+  display: block; width: 4px; height: 6px; border-radius: 2px;
+  background: linear-gradient(180deg, var(--navy-500), var(--navy-700));
+  transition: height .08s linear;
+}
+.voice-panel.is-idle .voice-meter span { opacity: .35; }
+
+.voice-transcript {
+  min-height: 48px; padding: 11px 13px;
+  background: #fff; border: 1px solid var(--line); border-radius: var(--radius-sm);
+  font-size: 14.5px; line-height: 1.65; color: var(--ink);
+  max-height: 160px; overflow-y: auto; word-break: keep-all;
+}
+.voice-final { color: var(--ink); }
+.voice-interim { color: var(--ink-muted); }
+.voice-placeholder { color: #a7b0bd; }
+.voice-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 11px; }
+
 .field-check { gap: 0; }
 .check-line {
   display: flex; align-items: center; gap: 9px;
@@ -524,8 +583,19 @@ button, input, select, textarea { font: inherit; color: inherit; }
     <form class="start-form" id="start-form" autocomplete="off" novalidate>
       <div class="field field-grow">
         <label for="topic-input">검토 주제</label>
-        <input type="text" id="topic-input" name="topic" placeholder="예: 당사의 신규 수익원 발굴 방안"
-               maxlength="300" required inputmode="text" enterkeyhint="go">
+        <div class="input-with-mic">
+          <input type="text" id="topic-input" name="topic" placeholder="예: 당사의 신규 수익원 발굴 방안"
+                 maxlength="300" required inputmode="text" enterkeyhint="go">
+          <button type="button" class="mic-btn" id="btn-mic" hidden
+                  aria-label="음성으로 입력" title="음성으로 입력">
+            <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false">
+              <path d="M12 14a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v5a3 3 0 0 0 3 3z"
+                    fill="currentColor"/>
+              <path d="M18 11a6 6 0 0 1-12 0M12 17v4m-3 0h6" fill="none"
+                    stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+          </button>
+        </div>
       </div>
       <div class="field field-count">
         <label for="count-input">생성 개수</label>
@@ -535,6 +605,28 @@ button, input, select, textarea { font: inherit; color: inherit; }
         <span class="btn-text">아이디어 생성</span>
       </button>
     </form>
+    <!-- 음성 입력 패널: 말하는 동안 실시간으로 소리와 인식 결과를 보여준다 -->
+    <div class="voice-panel" id="voice-panel" hidden>
+      <div class="voice-head">
+        <span class="voice-dot" aria-hidden="true"></span>
+        <span class="voice-status" id="voice-status" role="status" aria-live="polite">듣고 있습니다…</span>
+        <button type="button" class="icon-btn voice-close" id="btn-voice-cancel" aria-label="음성 입력 취소">✕</button>
+      </div>
+      <div class="voice-meter" id="voice-meter" aria-hidden="true">
+        <span></span><span></span><span></span><span></span><span></span>
+        <span></span><span></span><span></span><span></span><span></span>
+        <span></span><span></span><span></span><span></span><span></span>
+      </div>
+      <p class="voice-transcript" id="voice-transcript">
+        <span class="voice-final" id="voice-final"></span><span class="voice-interim" id="voice-interim"></span><span
+          class="voice-placeholder" id="voice-placeholder">마이크에 대고 주제를 말씀해 주세요.</span>
+      </p>
+      <div class="voice-actions">
+        <button type="button" class="btn btn-outline btn-sm" id="btn-voice-clear">지우고 다시</button>
+        <button type="button" class="btn btn-primary btn-sm" id="btn-voice-done">입력 완료</button>
+      </div>
+    </div>
+
     <p class="hint" id="start-hint">
       시작하려면 우측 상단 <strong>설정</strong>에서 Gemini API 키를 먼저 등록해 주세요.
     </p>
@@ -2186,6 +2278,229 @@ var Docx = (function () {
   return { buildDocx: buildDocx };
 })();
 
+/* ===========================  9. Voice  ================================== */
+/* 음성 입력 (Web Speech API)
+ *  · 스마트폰(안드로이드 크롬)과 PC(크롬·엣지·사파리)에서 동작한다.
+ *  · 마이크는 https 에서만 열린다(브라우저 보안 정책). 파일을 직접 연
+ *    경우(file://)에는 사용할 수 없으므로 안내 문구를 띄운다.
+ *  · 말하는 동안 실제 음량을 막대로 보여주고, 인식 중인 문장을
+ *    회색 글씨로, 확정된 문장을 검은 글씨로 표시한다.
+ *  · 중지 시 마이크 트랙·오디오 컨텍스트·애니메이션을 모두 정리해
+ *    자원이 남지 않게 한다.
+ */
+var Voice = (function () {
+  var Engine = window.SpeechRecognition || window.webkitSpeechRecognition || null;
+
+  var recognition = null;      // 인식기
+  var stream = null;           // 음량 측정용 마이크 스트림
+  var audioCtx = null;
+  var analyser = null;
+  var rafId = 0;
+  var active = false;
+  var stoppedByUser = false;
+  var handlers = {};
+  var finalText = '';
+
+  function supported() { return !!Engine; }
+
+  function secureOk() {
+    // localhost 는 브라우저가 안전한 출처로 취급한다
+    return window.isSecureContext === true
+      || location.protocol === 'https:'
+      || location.hostname === 'localhost'
+      || location.hostname === '127.0.0.1';
+  }
+
+  function friendlyError(code) {
+    switch (code) {
+      case 'not-allowed':
+      case 'service-not-allowed':
+        return '마이크 사용이 차단되어 있습니다. 브라우저 주소창의 자물쇠 아이콘에서 마이크를 허용해 주세요.';
+      case 'no-speech':
+        return '소리가 들리지 않았습니다. 마이크에 가까이 대고 다시 말씀해 주세요.';
+      case 'audio-capture':
+        return '마이크를 찾을 수 없습니다. 기기에 마이크가 연결되어 있는지 확인해 주세요.';
+      case 'network':
+        return '음성 인식 서버에 연결하지 못했습니다. 인터넷 연결을 확인해 주세요.';
+      case 'aborted':
+        return '';
+      default:
+        return '음성 인식 중 문제가 발생했습니다. 다시 시도해 주세요.';
+    }
+  }
+
+  /* ── 음량 시각화 ────────────────────────────────────────────── */
+  function startMeter() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      return Promise.resolve(false);
+    }
+    return navigator.mediaDevices.getUserMedia({ audio: true }).then(function (mic) {
+      stream = mic;
+      var Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!Ctx) { return false; }
+      audioCtx = new Ctx();
+      analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 64;
+      analyser.smoothingTimeConstant = 0.75;
+      audioCtx.createMediaStreamSource(mic).connect(analyser);
+      return true;
+    }).catch(function () { return false; });   // 실패해도 인식은 계속된다
+  }
+
+  function runMeter(bars, hasAudio) {
+    var data = analyser ? new Uint8Array(analyser.frequencyBinCount) : null;
+    var tick = 0;
+
+    function frame() {
+      if (!active) { return; }
+      if (analyser && data) {
+        analyser.getByteFrequencyData(data);
+        for (var i = 0; i < bars.length; i++) {
+          // 주파수 구간을 막대 수에 맞춰 나눠 담는다
+          var idx = Math.floor(i * data.length / bars.length);
+          var level = data[idx] / 255;
+          bars[i].style.height = Math.max(6, Math.round(6 + level * 38)) + 'px';
+        }
+      } else {
+        // 음량을 못 읽는 환경에서는 잔잔한 대기 애니메이션만 보여준다
+        tick += 0.08;
+        for (var j = 0; j < bars.length; j++) {
+          var wave = Math.sin(tick + j * 0.6) * 0.5 + 0.5;
+          bars[j].style.height = Math.round(6 + wave * 10) + 'px';
+        }
+      }
+      rafId = window.requestAnimationFrame(frame);
+    }
+    void hasAudio;
+    rafId = window.requestAnimationFrame(frame);
+  }
+
+  function stopMeter(bars) {
+    if (rafId) { window.cancelAnimationFrame(rafId); rafId = 0; }
+    if (stream) {
+      stream.getTracks().forEach(function (track) { track.stop(); });   // 마이크 해제
+      stream = null;
+    }
+    if (audioCtx) {
+      try { audioCtx.close(); } catch (e) { /* 이미 닫힘 */ }
+      audioCtx = null;
+    }
+    analyser = null;
+    if (bars) { bars.forEach(function (bar) { bar.style.height = '6px'; }); }
+  }
+
+  /* ── 인식 시작/중지 ─────────────────────────────────────────── */
+  function start(options) {
+    if (active) { return; }
+    handlers = options || {};
+    finalText = options.initialText || '';
+    stoppedByUser = false;
+
+    if (!supported()) {
+      if (handlers.onError) { handlers.onError('이 브라우저는 음성 입력을 지원하지 않습니다. 크롬 또는 엣지에서 사용해 주세요.'); }
+      return;
+    }
+    if (!secureOk()) {
+      if (handlers.onError) {
+        handlers.onError('보안 정책상 파일을 직접 연 상태에서는 마이크를 쓸 수 없습니다. 웹 주소로 접속한 뒤 사용해 주세요.');
+      }
+      return;
+    }
+
+    recognition = new Engine();
+    recognition.lang = 'ko-KR';
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.maxAlternatives = 1;
+
+    recognition.onresult = function (event) {
+      var interim = '';
+      for (var i = event.resultIndex; i < event.results.length; i++) {
+        var result = event.results[i];
+        var text = result[0] ? result[0].transcript : '';
+        if (result.isFinal) { finalText += text; } else { interim += text; }
+      }
+      if (handlers.onText) { handlers.onText(finalText, interim); }
+    };
+
+    recognition.onerror = function (event) {
+      var message = friendlyError(event.error);
+      // no-speech 는 잠깐 조용했을 뿐이므로 중단하지 않는다
+      if (event.error === 'no-speech') {
+        if (handlers.onStatus) { handlers.onStatus('소리가 들리지 않습니다. 계속 말씀해 주세요.'); }
+        return;
+      }
+      // 치명적 오류는 알림만 하지 말고 세션을 실제로 끝내야 한다.
+      // (끝내지 않으면 active 가 남아 다음에 버튼을 눌러도 시작되지 않는다)
+      stoppedByUser = true;
+      // 파일을 직접 연 경우(file://) 브라우저에 따라 음성 인식이 막힐 수 있어
+      // 웹 주소로 접속하면 해결된다는 안내를 덧붙인다.
+      if (message && location.protocol === 'file:') {
+        message += ' 파일을 직접 연 상태에서는 음성 인식이 제한될 수 있으니, 웹 주소로 접속해 사용해 보세요.';
+      }
+      if (message && handlers.onError) { handlers.onError(message); }
+      finish(false);
+    };
+
+    recognition.onend = function () {
+      // 안드로이드 크롬은 잠시 조용하면 스스로 멈춘다 → 사용자가 끝내기 전까지 이어 붙인다
+      if (active && !stoppedByUser) {
+        try { recognition.start(); return; } catch (e) { /* 재시작 실패 시 종료 */ }
+      }
+      finish(true);
+    };
+
+    active = true;
+    try {
+      recognition.start();
+    } catch (e) {
+      active = false;
+      var startMsg = '음성 인식을 시작하지 못했습니다. 잠시 후 다시 시도해 주세요.';
+      if (location.protocol === 'file:') {
+        startMsg += ' 파일을 직접 연 상태에서는 제한될 수 있으니 웹 주소로 접속해 보세요.';
+      }
+      if (handlers.onError) { handlers.onError(startMsg); }
+      return;
+    }
+
+    if (handlers.onStart) { handlers.onStart(); }
+    startMeter().then(function (ok) {
+      if (active && handlers.bars) { runMeter(handlers.bars, ok); }
+    });
+  }
+
+  /** 세션 종료. notify=false 면 오류 상황이므로 완료 콜백을 부르지 않는다. */
+  function finish(notify) {
+    if (!active) { return; }
+    active = false;
+    stopMeter(handlers.bars);
+    if (recognition) {
+      recognition.onresult = recognition.onerror = recognition.onend = null;
+      try { recognition.abort(); } catch (e) { /* 이미 종료됨 */ }
+      recognition = null;
+    }
+    if (notify !== false && handlers.onStop) { handlers.onStop(finalText); }
+  }
+
+  function stop() {
+    if (!active) { return; }
+    stoppedByUser = true;
+    if (recognition) {
+      try { recognition.stop(); } catch (e) { finish(true); }
+    } else {
+      finish(true);
+    }
+  }
+
+  function reset() { finalText = ''; }
+  function isActive() { return active; }
+
+  return {
+    supported: supported, secureOk: secureOk,
+    start: start, stop: stop, reset: reset, isActive: isActive
+  };
+})();
+
 /* ===========================  9. UI  ===================================== */
 /* 성능: 트리 전체를 다시 그리지 않는다. 생성·수정·삭제는 해당 노드(또는 그
    자식 목록)의 DOM 만 국소적으로 갱신하고, 자식 DOM 은 펼칠 때 처음 만든다.
@@ -2690,7 +3005,8 @@ var App = (function () {
     var pick = function (selector) { return clone.querySelector(selector); };
 
     // 1) 사용자가 만든 내용 제거
-    ['#tree-root', '#toast-stack', '#report-summary', '#report-meta', '#workspace-title']
+    ['#tree-root', '#toast-stack', '#report-summary', '#report-meta', '#workspace-title',
+     '#voice-final', '#voice-interim']
       .forEach(function (selector) {
         var node = pick(selector);
         if (node) { node.textContent = ''; }
@@ -2707,7 +3023,7 @@ var App = (function () {
     if (modelSelect) { modelSelect.textContent = ''; }
 
     // 3) 화면 상태를 초기 상태로 되돌림
-    ['#workspace', '#report-panel', '#settings-modal', '#overlay'].forEach(function (selector) {
+    ['#workspace', '#report-panel', '#settings-modal', '#overlay', '#voice-panel'].forEach(function (selector) {
       var node = pick(selector);
       if (node) { node.setAttribute('hidden', ''); }
     });
@@ -2740,6 +3056,63 @@ var App = (function () {
     var html = '<!DOCTYPE html>\n' + clone.outerHTML;
     downloadBlob(new Blob([html], { type: 'text/html;charset=utf-8' }), 'IDEA_MECE.html');
     toast('앱 파일을 저장했습니다. 내 작업 내용은 포함되지 않습니다.', 'success');
+  }
+
+  /* ---------- 음성 입력 ---------- */
+  function voiceBars() {
+    return Array.prototype.slice.call(el.voiceMeter.querySelectorAll('span'));
+  }
+
+  function renderTranscript(finalText, interimText) {
+    el.voiceFinal.textContent = finalText || '';
+    el.voiceInterim.textContent = interimText || '';
+    var empty = !(finalText || interimText);
+    el.voicePlaceholder.hidden = !empty;
+    el.voicePanel.classList.toggle('is-idle', empty);
+    // 길어지면 항상 마지막 글자가 보이도록
+    el.voiceTranscript.scrollTop = el.voiceTranscript.scrollHeight;
+  }
+
+  function openVoicePanel() {
+    el.voicePanel.hidden = false;
+    el.btnMic.classList.add('is-recording');
+    el.btnMic.setAttribute('aria-label', '음성 입력 중지');
+    el.voiceStatus.textContent = '듣고 있습니다…';
+    renderTranscript(el.topicInput.value.trim(), '');
+  }
+
+  function closeVoicePanel() {
+    el.voicePanel.hidden = true;
+    el.btnMic.classList.remove('is-recording');
+    el.btnMic.setAttribute('aria-label', '음성으로 입력');
+  }
+
+  function startVoice() {
+    if (Voice.isActive()) { Voice.stop(); return; }
+    Voice.start({
+      initialText: el.topicInput.value.trim() ? el.topicInput.value.trim() + ' ' : '',
+      bars: voiceBars(),
+      onStart: openVoicePanel,
+      onText: function (finalText, interimText) {
+        renderTranscript(finalText, interimText);
+        // 인식되는 대로 입력란에도 바로 반영한다
+        el.topicInput.value = (finalText + interimText).slice(0, LIMITS.maxTopic);
+      },
+      onStatus: function (message) { el.voiceStatus.textContent = message; },
+      onError: function (message) {
+        closeVoicePanel();
+        toast(message, 'error');
+      },
+      onStop: function (finalText) {
+        closeVoicePanel();
+        var text = (finalText || '').trim().slice(0, LIMITS.maxTopic);
+        if (text) {
+          el.topicInput.value = text;
+          el.topicInput.focus();
+          toast('음성 입력을 마쳤습니다. 내용을 확인하고 수정하실 수 있습니다.', 'success');
+        }
+      }
+    });
   }
 
   /* ---------- 설정 ---------- */
@@ -2897,6 +3270,10 @@ var App = (function () {
      'btnOpenSettings:btn-open-settings', 'btnCloseSettings:btn-close-settings',
      'btnCancelSettings:btn-cancel-settings', 'btnClearKey:btn-clear-key',
      'settingsIndicator:settings-indicator', 'apiKeyHint:api-key-hint', 'emailHint:email-hint',
+     'btnMic:btn-mic', 'voicePanel:voice-panel', 'voiceStatus:voice-status',
+     'voiceMeter:voice-meter', 'voiceTranscript:voice-transcript', 'voiceFinal:voice-final',
+     'voiceInterim:voice-interim', 'voicePlaceholder:voice-placeholder',
+     'btnVoiceCancel:btn-voice-cancel', 'btnVoiceClear:btn-voice-clear', 'btnVoiceDone:btn-voice-done',
      'overlay:overlay',
      'overlayText:overlay-text', 'overlaySub:overlay-sub', 'toastStack:toast-stack',
      'nodeTemplate:node-template', 'btnSaveFile:btn-save-file'
@@ -2941,6 +3318,24 @@ var App = (function () {
     document.addEventListener('keydown', function (event) {
       if (event.key === 'Escape' && !el.modal.hidden) { closeSettings(); }
     });
+    // 음성 입력은 지원하는 브라우저에서만 버튼을 보여준다
+    if (Voice.supported()) {
+      el.btnMic.hidden = false;
+      el.btnMic.addEventListener('click', startVoice);
+      el.btnVoiceCancel.addEventListener('click', function () {
+        Voice.reset();
+        Voice.stop();
+        closeVoicePanel();
+      });
+      el.btnVoiceClear.addEventListener('click', function () {
+        Voice.reset();
+        el.topicInput.value = '';
+        renderTranscript('', '');
+        el.voiceStatus.textContent = '다시 말씀해 주세요.';
+      });
+      el.btnVoiceDone.addEventListener('click', function () { Voice.stop(); });
+    }
+
     el.btnMail.addEventListener('click', function () {
       var count = parseEmails(ui.settings.email).list.length;
       toast((count ? '수신자 ' + count + '명으로 메일 창이 열립니다. ' : '메일 창이 열립니다. ')
