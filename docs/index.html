@@ -3159,6 +3159,44 @@ var App = (function () {
     updateMailLink();
   }
 
+  /* API 키 정규화 — 붙여넣기 과정에서 섞여 들어오는 것들을 걷어낸다.
+     (보이지 않는 문자, 앞뒤 공백, 따옴표로 감싼 경우) */
+  function normalizeApiKey(raw) {
+    var key = String(raw == null ? '' : raw);
+    key = key.replace(/[\u200b-\u200f\u202a-\u202e\u2060-\u2064\ufeff\u00a0]/g, '');
+    key = key.trim().replace(/^["'`]+|["'`]+$/g, '').trim();
+    return key;
+  }
+
+  /* 키에 쓰일 수 있는 문자 범위.
+     ※ 예전에는 영문·숫자·밑줄·하이픈만 허용해서 마침표(.)가 들어간 키가
+       거부되었다. 실제 키에는 마침표를 비롯한 여러 기호가 들어올 수 있으므로
+       "공백·제어문자가 없는 눈에 보이는 아스키 문자"까지 넓혔다.
+       줄바꿈과 공백을 막으므로 요청 헤더가 조작될 위험은 없다. */
+  var API_KEY_RE = /^[\x21-\x7E]{20,200}$/;
+
+  /** 키를 검사해 {ok, key, error} 를 돌려준다. 무엇이 잘못됐는지 구체적으로 알린다. */
+  function checkApiKey(raw) {
+    var key = normalizeApiKey(raw);
+    if (!key) { return { ok: false, key: '', error: 'Gemini API 키를 입력해 주세요.' }; }
+    if (/\s/.test(key)) {
+      return { ok: false, key: key, error: 'API 키에 공백이나 줄바꿈이 섞여 있습니다. 키 전체를 한 번에 복사해 붙여넣어 주세요.' };
+    }
+    if (/[^\x21-\x7E]/.test(key)) {
+      return { ok: false, key: key, error: 'API 키에 한글이나 특수한 문자가 섞여 있습니다. 키만 정확히 복사했는지 확인해 주세요.' };
+    }
+    if (key.length < 20) {
+      return { ok: false, key: key, error: 'API 키가 너무 짧습니다(' + key.length + '자). 키 전체를 복사했는지 확인해 주세요.' };
+    }
+    if (key.length > 200) {
+      return { ok: false, key: key, error: 'API 키가 너무 깁니다. 키 외의 내용이 함께 붙여넣어지지 않았는지 확인해 주세요.' };
+    }
+    if (!API_KEY_RE.test(key)) {
+      return { ok: false, key: key, error: 'API 키 형식을 확인해 주세요.' };
+    }
+    return { ok: true, key: key, error: '' };
+  }
+
   var EMAIL_RE = /^[A-Za-z0-9._%+\-]{1,64}@[A-Za-z0-9.\-]{1,190}\.[A-Za-z]{2,24}$/;
   var EMAIL_FIND_RE = /[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,24}/g;
   var MAX_RECIPIENTS = 30;
@@ -3199,10 +3237,15 @@ var App = (function () {
 
   function saveSettings(event) {
     event.preventDefault();
-    var typedKey = el.apiKeyInput.value.trim();
-    if (typedKey && !/^[A-Za-z0-9_\-]{20,200}$/.test(typedKey)) {
-      toast('API 키 형식이 올바르지 않습니다. 공백이나 특수문자가 포함되지 않았는지 확인해 주세요.', 'error');
-      return;
+    var typedKey = normalizeApiKey(el.apiKeyInput.value);
+    if (typedKey) {
+      var keyCheck = checkApiKey(typedKey);
+      if (!keyCheck.ok) {
+        toast(keyCheck.error, 'error');
+        el.apiKeyInput.focus();
+        return;
+      }
+      typedKey = keyCheck.key;
     }
     var parsedEmails = parseEmails(el.emailInput.value);
     if (parsedEmails.hasInvalid) {

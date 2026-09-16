@@ -42,6 +42,8 @@ __all__ = [
     "mask_key",
     "sanitize_text",
     "validate_count",
+    "normalize_api_key",
+    "validate_api_key",
     "validate_email",
     "validate_emails",
     "validate_model",
@@ -51,8 +53,14 @@ __all__ = [
 _CONTROL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 _EMAIL_RE = re.compile(r"^[A-Za-z0-9._%+\-]{1,64}@[A-Za-z0-9.\-]{1,190}\.[A-Za-z]{2,24}$")
 _EMAIL_FIND_RE = re.compile(r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,24}")
-# Gemini API 키 형식(영문/숫자/-/_ 조합). 공백·따옴표·제어문자 차단으로 헤더 인젝션 방지.
-_API_KEY_RE = re.compile(r"^[A-Za-z0-9_\-]{20,200}$")
+# API 키에 쓰일 수 있는 문자 범위.
+# ※ 예전에는 영문·숫자·밑줄·하이픈만 허용해 마침표(.)가 들어간 키가 거부되었다.
+#   실제 키에는 마침표를 비롯한 여러 기호가 들어올 수 있으므로
+#   "공백·제어문자가 없는 눈에 보이는 아스키 문자"까지 넓혔다.
+#   공백과 줄바꿈을 계속 막으므로 헤더 인젝션 위험은 없다.
+_API_KEY_RE = re.compile(r"^[\x21-\x7E]{20,200}$")
+# 붙여넣기 과정에서 섞여 들어오는 보이지 않는 문자
+_INVISIBLE_RE = re.compile(r"[\u200b-\u200f\u202a-\u202e\u2060-\u2064\ufeff\u00a0]")
 
 MAX_VAULT_ENTRIES = 5000  # 메모리 상한 (초과 시 가장 먼저 만료될 항목부터 제거)
 
@@ -213,12 +221,27 @@ def validate_model(value: Any) -> str:
     return model
 
 
+def normalize_api_key(value: Any) -> str:
+    """보이지 않는 문자·앞뒤 공백·감싼 따옴표를 걷어낸다."""
+    key = _INVISIBLE_RE.sub("", str(value or ""))
+    return key.strip().strip("\"'`").strip()
+
+
 def validate_api_key(value: Any) -> str:
-    key = str(value or "").strip()
+    """키를 검사하고 정규화된 값을 반환한다. 무엇이 잘못됐는지 구체적으로 알린다."""
+    key = normalize_api_key(value)
     if not key:
         raise ValueError("API 키를 입력해 주세요.")
+    if any(ch.isspace() for ch in key):
+        raise ValueError("API 키에 공백이나 줄바꿈이 섞여 있습니다. 키 전체를 한 번에 복사해 붙여넣어 주세요.")
+    if not key.isascii():
+        raise ValueError("API 키에 한글이나 특수한 문자가 섞여 있습니다. 키만 정확히 복사했는지 확인해 주세요.")
+    if len(key) < 20:
+        raise ValueError(f"API 키가 너무 짧습니다({len(key)}자). 키 전체를 복사했는지 확인해 주세요.")
+    if len(key) > 200:
+        raise ValueError("API 키가 너무 깁니다. 키 외의 내용이 함께 붙여넣어지지 않았는지 확인해 주세요.")
     if not _API_KEY_RE.match(key):
-        raise ValueError("API 키 형식이 올바르지 않습니다. 공백이나 특수문자가 포함되지 않았는지 확인해 주세요.")
+        raise ValueError("API 키 형식을 확인해 주세요.")
     return key
 
 
